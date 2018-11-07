@@ -161,6 +161,7 @@ mem_init(void)
 	// Your code goes here:
 
 	//为pages 开辟内存
+	//一个pageinfo 8b
 	pages = (struct PageInfo *)boot_alloc(npages * sizeof(struct PageInfo));
 	//用0 来初始化
 	memset(pages, 0, npages * sizeof(struct PageInfo));
@@ -316,7 +317,7 @@ page_alloc(int alloc_flags)
     
 	//按照要求进行初始化
 	if (alloc_flags & ALLOC_ZERO) {
-		//page2kva 函数的作用就是通过物理页获取其内核虚拟地址
+		//page2kva 函数的作用就是通过物理页获取其物理页的内核虚拟地址
         memset(page2kva(new_page), '\0', PGSIZE);
     }
 
@@ -374,11 +375,36 @@ page_decref(struct PageInfo* pp)
 // Hint 3: look at inc/mmu.h for useful macros that manipulate page
 // table and page directory entries.
 //
+
+//查找一个虚拟地址对应的页表项地址
+// pgdir 页目录表的地址  va 虚拟地址 create 不存在是否创建 return page table element 页表项地址
 pte_t *
 pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
 	// Fill this function in
-	return NULL;
+	//声明一个页表
+    pte_t *pgtab;
+	unsigned int pdx_idx = PDX(va);
+	unsigned int ptx_idx = PTX(va);
+	
+	//若页目录表项不为空 且 有权限
+    if (pgdir[pdx_idx] & PTE_P) {
+		//找到页表的虚拟地址
+		//页目录表和页表里存的都是物理地址,需要转换为虚拟地址
+        pgtab = KADDR(PTE_ADDR(pgdir[pdx_idx]));
+    } else {
+        if (create) {
+            struct PageInfo *new_pageInfo = page_alloc(1);
+            //可能创建失败
+			if (new_pageInfo!=NULL) {
+                new_pageInfo->pp_ref += 1;
+				//page2pa(new_pageInfo) 返回后一个页表虚拟地址二十位,作为页目录表项 的 前20位
+				pgdir[pdx_idx]=(page2pa(new_pageInfo) | PTE_P | PTE_W | PTE_U);\
+            } else	return NULL;
+        } else	return NULL;
+    }
+    return &pgtab[ptx_idx];
+
 }
 
 //
@@ -396,6 +422,19 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
 	// Fill this function in
+	pte_t *pgtab;
+
+    size_t end_addr = va + size;
+
+    for (;va < end_addr; va += PGSIZE, pa += PGSIZE) {
+        //获取页表项地址
+		pgtab = pgdir_walk(pgdir, (void *)va, 1);
+        if (!pgtab) {
+            return;
+        }
+
+        *pgtab = pa | perm | PTE_P;
+    }
 }
 
 //
@@ -427,7 +466,19 @@ int
 page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
 	// Fill this function in
-	return 0;
+	pte_t *pgtab = pgdir_walk(pgdir, va, 1);
+    if (!pgtab) {
+        return -E_NO_MEM;
+    }
+	//又有一个虚拟地址映射到该物理页 ref+1
+    pp->pp_ref++;
+
+	//如果该页表项已经映射
+    if (*pgtab & PTE_P) {
+        page_remove(pgdir, va);
+    }
+    *pgtab = page2pa(pp) | perm | PTE_P;
+    return 0;
 }
 
 //
@@ -440,12 +491,20 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 // Return NULL if there is no page mapped at va.
 //
 // Hint: the TA solution uses pgdir_walk and pa2page.
-//
+//如果pte_store不为0,就把pte 页表项的地址存在里面
 struct PageInfo *
 page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 {
-	// Fill this function in
-	return NULL;
+	//不创建
+	pte_t *pgtab = pgdir_walk(pgdir, va, 0);  
+    if (!pgtab) {
+        return NULL;  // 未找到则返回 NULL
+    }
+    if (pte_store) {
+        *pte_store = pgtab;  // 附加保存一个指向找到的页表的指针
+    }
+	//PTE_ADDR 返回页表项的前20位,前20位+pages就是 pageinfo(页表描述)的虚拟地址
+    return pa2page(PTE_ADDR(*pgtab));  //  返回页面描述
 }
 
 //
@@ -467,6 +526,15 @@ void
 page_remove(pde_t *pgdir, void *va)
 {
 	// Fill this function in
+	pte_t *pgtab;
+    pte_t **pte_store = &pgtab;
+    struct PageInfo *pInfo = page_lookup(pgdir, va, pte_store);
+    if (!pInfo) {
+        return;
+    }
+    page_decref(pInfo);
+    *pgtab = 0;  // 将内容清0，即无法再根据页表内容得到物理地址。
+    tlb_invalidate(pgdir, va);  // 通知tlb失效。tlb是个高速缓存，用来缓存查找记录增加查找速度。
 }
 
 //
