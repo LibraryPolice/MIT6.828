@@ -398,8 +398,9 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
             //可能创建失败
 			if (new_pageInfo!=NULL) {
                 new_pageInfo->pp_ref += 1;
-				//page2pa(new_pageInfo) 返回后一个页表虚拟地址二十位,作为页目录表项 的 前20位
-				pgdir[pdx_idx]=(page2pa(new_pageInfo) | PTE_P | PTE_W | PTE_U);\
+				//page2pa(new_pageInfo) 根据一个页表信息的地址 返回一个页表虚拟地址后二十位,作为页目录表项 的 前20位
+				pgdir[pdx_idx]=(page2pa(new_pageInfo) | PTE_P | PTE_W | PTE_U);
+				pgtab = KADDR(PTE_ADDR(pgdir[pdx_idx]));
             } else	return NULL;
         } else	return NULL;
     }
