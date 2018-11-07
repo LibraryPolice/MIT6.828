@@ -440,6 +440,8 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 
         *pgtab = pa | perm | PTE_P;
     }
+	cprintf("boot_map succeeded!\n");
+	
 }
 
 //
