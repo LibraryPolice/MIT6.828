@@ -430,17 +430,16 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 	pte_t *pgtab;
 
     size_t end_addr = va + size;
-
+	cprintf("boot_map1 succeeded!\n");
     for (;va < end_addr; va += PGSIZE, pa += PGSIZE) {
         //获取页表项地址
 		pgtab = pgdir_walk(pgdir, (void *)va, 1);
         if (!pgtab) {
             return;
         }
-
         *pgtab = pa | perm | PTE_P;
     }
-	cprintf("boot_map succeeded!\n");
+	cprintf("boot_map2 succeeded!\n");
 	
 }
 
