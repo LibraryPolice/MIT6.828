@@ -211,7 +211,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(kern_pgdir, KERNBASE, 0xffffffff-KERNBASE, 0, PTE_W);
+	boot_map_region(kern_pgdir, KERNBASE, ROUNDUP(0xffffffff-KERNBASE,PGSIZE), 0, PTE_W);
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
 
@@ -426,20 +426,32 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
-	// Fill this function in
-	pte_t *pgtab;
+	// // Fill this function in
+	// pte_t *pgtab;
 
-    size_t end_addr = va + size;
-	cprintf("boot_map1 succeeded!\n");
-    for (;va < end_addr; va += PGSIZE, pa += PGSIZE) {
-        //获取页表项地址
-		pgtab = pgdir_walk(pgdir, (void *)va, 1);
+    // size_t end_addr = va + size;
+	// cprintf("boot_map1 succeeded!\n");
+    // for (;va < end_addr; va += PGSIZE, pa += PGSIZE) {
+    //     //获取页表项地址
+	// 	pgtab = pgdir_walk(pgdir, (void *)va, 1);
+    //     if (!pgtab) {
+    //         return;
+    //     }
+    //     *pgtab = pa | perm | PTE_P;
+    // }
+	// cprintf("boot_map2 succeeded!\n");
+	pte_t *pgtab;
+    size_t pg_num = PGNUM(size);
+    for (size_t i=0; i<pg_num; i++) {
+        pgtab = pgdir_walk(pgdir, (void *)va, 1);
         if (!pgtab) {
             return;
         }
+        //cprintf("va = %p\n", va);
         *pgtab = pa | perm | PTE_P;
+        va += PGSIZE;
+        pa += PGSIZE;
     }
-	cprintf("boot_map2 succeeded!\n");
 	
 }
 
