@@ -102,8 +102,16 @@ boot_alloc(uint32_t n)
 	// to a multiple of PGSIZE.
 	//
 	// LAB 2: Your code here.
-
-	return NULL;
+ 	if (n == 0) {
+        return nextfree;
+    }
+    result = nextfree;
+    nextfree += ROUNDUP(n, PGSIZE);
+	if((uint32_t)nextfree-KERNBASE > (npages * PGSIZE)) {
+		panic("Out of memory!\n");
+	}
+	//返回新开内存起始位置
+	return result;
 }
 
 // Set up a two-level page table:
@@ -125,11 +133,14 @@ mem_init(void)
 	i386_detect_memory();
 
 	// Remove this line when you're ready to test this function.
-	panic("mem_init: This function is not finished\n");
+	//panic("mem_init: This function is not finished\n");
 
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
+	
+	//为kern_pgdir开辟内存
 	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
+	//用0来初始化
 	memset(kern_pgdir, 0, PGSIZE);
 
 	//////////////////////////////////////////////////////////////////////
@@ -149,6 +160,10 @@ mem_init(void)
 	// to initialize all fields of each struct PageInfo to 0.
 	// Your code goes here:
 
+	//为pages 开辟内存
+	pages = (struct PageInfo *)boot_alloc(npages * sizeof(struct PageInfo));
+	//用0 来初始化
+	memset(pages, 0, npages * sizeof(struct PageInfo));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -234,29 +249,46 @@ mem_init(void)
 void
 page_init(void)
 {
+	size_t i;
+	
 	// The example code here marks all physical pages as free.
 	// However this is not truly the case.  What memory is free?
 	//  1) Mark physical page 0 as in use.
 	//     This way we preserve the real-mode IDT and BIOS structures
 	//     in case we ever need them.  (Currently we don't, but...)
+	pages[0].pp_ref = 1;
 	//  2) The rest of base memory, [PGSIZE, npages_basemem * PGSIZE)
 	//     is free.
+	// basemem 为0
+	for ( i = 1; i < npages_basemem; i++) {
+        pages[i].pp_ref = 0;
+		//添加到page_free_list的链表头
+        pages[i].pp_link = page_free_list;
+        page_free_list = &pages[i];
+    }
 	//  3) Then comes the IO hole [IOPHYSMEM, EXTPHYSMEM), which must
 	//     never be allocated.
+	// IO部分为1
+	for ( i = IOPHYSMEM/PGSIZE; i < EXTPHYSMEM/PGSIZE; i++) {
+        pages[i].pp_ref = 1;
+    }
 	//  4) Then extended memory [EXTPHYSMEM, ...).
 	//     Some of it is in use, some is free. Where is the kernel
 	//     in physical memory?  Which pages are already in use for
 	//     page tables and other data structures?
-	//
-	// Change the code to reflect this.
-	// NB: DO NOT actually touch the physical memory corresponding to
-	// free pages!
-	size_t i;
-	for (i = 0; i < npages; i++) {
-		pages[i].pp_ref = 0;
-		pages[i].pp_link = page_free_list;
-		page_free_list = &pages[i];
-	}
+	// 已使用的部分为1
+	size_t first_free_address = PADDR(boot_alloc(0));
+    for (i = EXTPHYSMEM/PGSIZE; i < first_free_address/PGSIZE; i++) {
+        pages[i].pp_ref = 1;
+    }
+
+	// extern外未使用的为0
+    for (i = first_free_address/PGSIZE; i < npages; i++) {
+        pages[i].pp_ref = 0;
+        pages[i].pp_link = page_free_list;
+        page_free_list = &pages[i];
+    }
+
 }
 
 //
@@ -275,7 +307,21 @@ struct PageInfo *
 page_alloc(int alloc_flags)
 {
 	// Fill this function in
-	return 0;
+	if (page_free_list == NULL) {
+        return NULL;
+    }
+    struct PageInfo *new_page = page_free_list;
+    page_free_list = page_free_list->pp_link;
+    new_page->pp_link = NULL; 
+    
+	//按照要求进行初始化
+	if (alloc_flags & ALLOC_ZERO) {
+		//page2kva 函数的作用就是通过物理页获取其内核虚拟地址
+        memset(page2kva(new_page), '\0', PGSIZE);
+    }
+
+    return new_page;
+
 }
 
 //
@@ -288,6 +334,11 @@ page_free(struct PageInfo *pp)
 	// Fill this function in
 	// Hint: You may want to panic if pp->pp_ref is nonzero or
 	// pp->pp_link is not NULL.
+	assert(pp->pp_ref == 0);
+	assert(pp->pp_link == NULL);
+
+    pp->pp_link = page_free_list;
+    page_free_list = pp;
 }
 
 //
