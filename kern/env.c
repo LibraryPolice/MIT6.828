@@ -116,11 +116,18 @@ env_init(void)
 {
 	// Set up envs array
 	// LAB 3: Your code here.
-
+	// 环境的初始化 相当于 page free list的初始化 
+	// TODO 环境的个数是固定的? 大小如何确定?
+	for (int i = NENV; i >= 0; i--) {
+		envs[i].env_id = 0;
+		envs[i].env_status = ENV_FREE;
+		envs[i].env_link = env_free_list;
+		env_free_list = &envs[i];
+	}
 	// Per-CPU part of the initialization
 	env_init_percpu();
 }
-
+// TODO GDT是个啥
 // Load GDT and segment descriptors.
 void
 env_init_percpu(void)
@@ -151,7 +158,9 @@ env_init_percpu(void)
 //
 // Returns 0 on success, < 0 on error.  Errors include:
 //	-E_NO_MEM if page directory or table could not be allocated.
-//
+
+// 为当前用户进程e分配它的页目录表 
+// 步骤: 1.开配一个页 2.清零 3. 将env_cr3 字段指向该页的物理地址 4. 将当前进程的pg_dir 指向 该页的物理地址
 static int
 env_setup_vm(struct Env *e)
 {
@@ -161,27 +170,119 @@ env_setup_vm(struct Env *e)
 	// Allocate a page for the page directory
 	if (!(p = page_alloc(ALLOC_ZERO)))
 		return -E_NO_MEM;
+	
 
 	// Now, set e->env_pgdir and initialize the page directory.
 	//
 	// Hint:
 	//    - The VA space of all envs is identical above UTOP
 	//	(except at UVPT, which we've set below).
+	// 所有环境的虚拟内存(在UTOP之上的) 是相同的的.除了UVPT (1)
 	//	See inc/memlayout.h for permissions and layout.
 	//	Can you use kern_pgdir as a template?  Hint: Yes.
 	//	(Make sure you got the permissions right in Lab 2.)
+	// 可以把内核页目录表作为参考
 	//    - The initial VA below UTOP is empty.
+	// 低于UTOP的虚拟地址 初始化为空 (2)
 	//    - You do not need to make any more calls to page_alloc.
 	//    - Note: In general, pp_ref is not maintained for
 	//	physical pages mapped only above UTOP, but env_pgdir
+	// 通常来说,pp_ref这个计数 不记录 高于UTOP的地址,但是 页目录表是特殊的,你需要记录它.
+	// 理解:因为各个环境的页目录表是独立的,存放页目录表需要独立的物理空间
+	// ref这个计数是在page info结构体的,是指有多少虚拟地址指向这个物理页.
+	// 如果env的page info 不同,肯定就要加1了.
 	//	is an exception -- you need to increment env_pgdir's
 	//	pp_ref for env_free to work correctly.
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
-
+	e->env_pgdir = page2kva(p);
+	for (int i = PDX(UTOP);i<NPDENTRIES;i++){
+		e->env_pgdir[i] = kern_pgdir[i];
+	}
+	p->pp_ref ++;
+	// 注释与功能分析
+/*
+ * Virtual memory map:                                Permissions
+ *                                                    kernel/user
+ *
+ *    4 Gig -------->  +------------------------------+
+ *                     |                              | RW/--
+ *                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *                     :              .               :
+ *                     :              .               :
+ *                     :              .               :
+ *                     |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| RW/--
+ *                     |                              | RW/--
+ *                     |   Remapped Physical Memory   | RW/--
+ *                     |                              | RW/--
+ *    KERNBASE, ---->  +------------------------------+ 0xf0000000      --+
+ *    KSTACKTOP        |     CPU0's Kernel Stack      | RW/--  KSTKSIZE   |
+ *                     | - - - - - - - - - - - - - - -|                   |
+ *                     |      Invalid Memory (*)      | --/--  KSTKGAP    |
+ *                     +------------------------------+                   |
+ *                     |     CPU1's Kernel Stack      | RW/--  KSTKSIZE   |
+ *                     | - - - - - - - - - - - - - - -|                 PTSIZE
+ *                     |      Invalid Memory (*)      | --/--  KSTKGAP    |
+ *                     +------------------------------+                   |
+ *                     :              .               :                   |
+ *                     :              .               :                   |
+ *    MMIOLIM ------>  +------------------------------+ 0xefc00000      --+
+ *                     |       Memory-mapped I/O      | RW/--  PTSIZE
+ * ULIM, MMIOBASE -->  +------------------------------+ 0xef800000
+ *                     |  Cur. Page Table (User R-)   | R-/R-  PTSIZE
+ *  只有UVPT不是相同的 
+ *  UVPT: User read-only virtual page table (see 'uvpt' below)
+ *  * [UVPT, UVPT + PTSIZE) points to the page directory itself.  Thus, the page
+ * directory is treated as a page table as well as a page directory.
+ * UVPT 到UVPT +PTSIZE 这个虚拟地址指向的是 页目录表本身,因此,页目录表也被当做一个页表
+ * 理解: 我们查找一个虚拟地址,是先分段,然后取前10+pg_dir的首地址 来查找页目录表 获得页表的物理地址 ,再取中间一段 加上刚刚获得的物理地址来获取页表项,最后获得物理地址
+ * 所有的页表一共需要4M,映射这4M物理地址,需要4M跨度的虚拟地址.需要一个页表来映射(消耗4k),如果我们把页目录表当做页表,则可以节省这4k.
+ * kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
+ * 根据页表项的虚拟地址找 页表项的物理地址 成功!
+ *  1.1.1 v_pte取出BITS(31,22)在页目录表中查找，根据上面的设置，找到的PDE项刚好指向页目录表
+ *  1.1.2 再取出BITS(21,12)，在页目录表（此时页目录表也作为一个页表）中查找，找到的PTE项指向xPTE所在的页表
+ *  1.1.3 再计算页内偏移，找到了xPTE的物理地址
+ * 
+ *    UVPT      ---->  +------------------------------+ 0xef400000
+ *                     |          RO PAGES            | R-/R-  PTSIZE
+ *    UPAGES    ---->  +------------------------------+ 0xef000000
+ *                     |           RO ENVS            | R-/R-  PTSIZE
+ *  在UTOP之上 ,虚拟地址独相同
+ *  低于UTOP 初始化为空
+ * UTOP,UENVS ------>  +------------------------------+ 0xeec00000
+ * UXSTACKTOP -/       |     User Exception Stack     | RW/RW  PGSIZE
+ *                     +------------------------------+ 0xeebff000
+ *                     |       Empty Memory (*)       | --/--  PGSIZE
+ *    USTACKTOP  --->  +------------------------------+ 0xeebfe000
+ *                     |      Normal User Stack       | RW/RW  PGSIZE
+ *                     +------------------------------+ 0xeebfd000
+ *                     |                              |
+ *                     |                              |
+ *                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *                     .                              .
+ *                     .                              .
+ *                     .                              .
+ *                     |~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
+ *                     |     Program Data & Heap      |
+ *    UTEXT -------->  +------------------------------+ 0x00800000
+ *    PFTEMP ------->  |       Empty Memory (*)       |        PTSIZE
+ *                     |                              |
+ *    UTEMP -------->  +------------------------------+ 0x00400000      --+
+ *                     |       Empty Memory (*)       |                   |
+ *                     | - - - - - - - - - - - - - - -|                   |
+ *                     |  User STAB Data (optional)   |                 PTSIZE
+ *    USTABDATA ---->  +------------------------------+ 0x00200000        |
+ *                     |       Empty Memory (*)       |                   |
+ *    0 ------------>  +------------------------------+                 --+
+ *
+ * (*) Note: The kernel ensures that "Invalid Memory" is *never* mapped.
+ *     "Empty Memory" is normally unmapped, but user programs may map pages
+ *     there if desired.  JOS user programs map pages temporarily at UTEMP.
+ */
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
+	// 这句和内核的映射也是一样的,都是自己映射自己
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
 
 	return 0;
@@ -195,6 +296,7 @@ env_setup_vm(struct Env *e)
 //	-E_NO_FREE_ENV if all NENV environments are allocated
 //	-E_NO_MEM on memory exhaustion
 //
+// 开辟环境
 int
 env_alloc(struct Env **newenv_store, envid_t parent_id)
 {
@@ -263,6 +365,19 @@ region_alloc(struct Env *e, void *va, size_t len)
 	// LAB 3: Your code here.
 	// (But only if you need it for load_icode.)
 	//
+	char *sa = (char *) ROUNDDOWN(va, PGSIZE);
+	char *ea = (char *) ROUNDUP((char *) va + len, PGSIZE);
+	
+	if (ea > (char *) UTOP)
+		panic("region_alloc: attempting to alloc phys mem for vaddr above UTOP");
+	struct Page* pp;
+	for (; sa < ea; sa += PGSIZE) {
+		
+		pp = page_alloc(1);
+		if(!pp) panic("Memory OUT");
+		page_insert(e->env_pgdir,pp,sa,PTE_W|PTE_U);
+
+	}
 	// Hint: It is easier to use region_alloc if the caller can pass
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.

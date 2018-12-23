@@ -23,8 +23,9 @@ void	env_pop_tf(struct Trapframe *tf) __attribute__((noreturn));
 
 // Without this extra macro, we couldn't pass macros like TEST to
 // ENV_CREATE because of the C pre-processor's argument prescan rule.
-#define ENV_PASTE3(x, y, z) x ## y ## z
+#define ENV_PASTE3(x, y, z) x ## y ## z //符号连接 这种宏定义的写法还没见过qwq
 
+//  这里的代码在疯狂宏定义
 #define ENV_CREATE(x, type)						\
 	do {								\
 		extern uint8_t ENV_PASTE3(_binary_obj_, x, _start)[];	\

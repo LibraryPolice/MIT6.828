@@ -43,9 +43,10 @@ enum EnvType {
 	ENV_TYPE_USER = 0,
 };
 
+// 环境的数据结构
 struct Env {
-	struct Trapframe env_tf;	// Saved registers
-	struct Env *env_link;		// Next free Env
+	struct Trapframe env_tf;	// Saved registers cpu现场保护信息(保存进程切换时 此进程的寄存器 的信息 )
+	struct Env *env_link;		// Next free Env 下一个空闲指针
 	envid_t env_id;			// Unique environment identifier
 	envid_t env_parent_id;		// env_id of this env's parent
 	enum EnvType env_type;		// Indicates special system environments
