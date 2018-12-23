@@ -8,15 +8,12 @@
 #include <kern/monitor.h>
 #include <kern/env.h>
 #include <kern/syscall.h>
-<<<<<<< HEAD
 #include <kern/sched.h>
 #include <kern/kclock.h>
 #include <kern/picirq.h>
 #include <kern/cpu.h>
 #include <kern/spinlock.h>
-=======
 extern uint32_t vectors[]; // in vectors.S: array of 256 entry pointers
->>>>>>> lab3
 
 static struct Taskstate ts;
 
