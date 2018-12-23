@@ -41,7 +41,7 @@
 	pushl $0;							\
 	pushl $(num);							\
 	jmp _alltraps
-
+#include "vectors.S"
 .text
 
 /*
@@ -53,4 +53,17 @@
 /*
  * Lab 3: Your code here for _alltraps
  */
+.globl _alltraps
+_alltraps:
+	# Build trap frame.
+	pushl %ds
+	pushl %es
+	pushal 
+	# Set up data segments.
+	movw $GD_KD, %ax
+	movw %ax, %ds
+	movw %ax, %es
 
+	# Call trap(tf), where tf=%esp
+	pushl %esp
+	call trap

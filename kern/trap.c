@@ -8,11 +8,15 @@
 #include <kern/monitor.h>
 #include <kern/env.h>
 #include <kern/syscall.h>
+<<<<<<< HEAD
 #include <kern/sched.h>
 #include <kern/kclock.h>
 #include <kern/picirq.h>
 #include <kern/cpu.h>
 #include <kern/spinlock.h>
+=======
+extern uint32_t vectors[]; // in vectors.S: array of 256 entry pointers
+>>>>>>> lab3
 
 static struct Taskstate ts;
 
@@ -72,6 +76,13 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
+	int i;
+
+	for (i = 0; i < 256; i++)
+		SETGATE(idt[i], 0, GD_KT, vectors[i], 0);
+	
+	SETGATE(idt[T_BRKPT],   0, GD_KT, vectors[T_BRKPT],   DPL_USER);
+	SETGATE(idt[T_SYSCALL], 1, GD_KT, vectors[T_SYSCALL], DPL_USER);
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -176,20 +187,27 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-
-	// Handle spurious interrupts
-	// The hardware sometimes raises these because of noise on the
-	// IRQ line or other reasons. We don't care.
-	if (tf->tf_trapno == IRQ_OFFSET + IRQ_SPURIOUS) {
-		cprintf("Spurious interrupt on irq 7\n");
-		print_trapframe(tf);
+		switch (tf->tf_trapno) {
+	case T_PGFLT:
+		page_fault_handler(tf);
+		return;
+	case T_BRKPT:
+		monitor(tf);
+		return;
+	case T_DEBUG: // interrupt of type-1
+		monitor(tf);
+		return;
+	case T_SYSCALL:
+		tf->tf_regs.reg_eax = syscall(
+			tf->tf_regs.reg_eax, // trap no. 
+			tf->tf_regs.reg_edx, // arg1
+			tf->tf_regs.reg_ecx, // arg2
+			tf->tf_regs.reg_ebx, // arg3
+			tf->tf_regs.reg_edi, // arg4
+			tf->tf_regs.reg_esi  // arg5
+		);
 		return;
 	}
-
-	// Handle clock interrupts. Don't forget to acknowledge the
-	// interrupt using lapic_eoi() before calling the scheduler!
-	// LAB 4: Your code here.
-
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
@@ -271,7 +289,10 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
-
+	if(tf->tf_cs && 0x01 == 0) {
+			panic("page_fault in kernel mode, fault address %d\n", fault_va);
+		}
+		
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
 

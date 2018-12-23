@@ -30,11 +30,15 @@
 #define PGNUM(la)	(((uintptr_t) (la)) >> PTXSHIFT)
 
 // page directory index
+
+// 0x3ff=0011 1111 1111   取前10
 #define PDX(la)		((((uintptr_t) (la)) >> PDXSHIFT) & 0x3FF)
 
+//取 10-20
 // page table index
 #define PTX(la)		((((uintptr_t) (la)) >> PTXSHIFT) & 0x3FF)
 
+//取20-22
 // offset in page
 #define PGOFF(la)	(((uintptr_t) (la)) & 0xFFF)
 
@@ -279,6 +283,7 @@ struct Gatedesc {
 // - dpl: Descriptor Privilege Level -
 //	  the privilege level required for software to invoke
 //	  this interrupt/trap gate explicitly using an int instruction.
+#define DPL_USER  0x3
 #define SETGATE(gate, istrap, sel, off, dpl)			\
 {								\
 	(gate).gd_off_15_0 = (uint32_t) (off) & 0xffff;		\
