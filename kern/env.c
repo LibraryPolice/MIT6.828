@@ -370,10 +370,10 @@ region_alloc(struct Env *e, void *va, size_t len)
 	
 	if (ea > (char *) UTOP)
 		panic("region_alloc: attempting to alloc phys mem for vaddr above UTOP");
-	struct Page* pp;
+	struct PageInfo* pp;
 	for (; sa < ea; sa += PGSIZE) {
 		
-		pp = page_alloc(1);
+		pp = (struct PageInfo*)page_alloc(1);
 		if(!pp) panic("Memory OUT");
 		page_insert(e->env_pgdir,pp,sa,PTE_W|PTE_U);
 
