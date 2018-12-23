@@ -13,7 +13,7 @@ enum {
 	E_NO_FREE_ENV	,	// Attempt to create a new environment beyond
 				// the maximum allowed
 	E_FAULT		,	// Memory fault
-
+	E_NO_SYS	= 7,
 	MAXERROR
 };
 
