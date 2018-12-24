@@ -111,7 +111,7 @@ sys_env_set_status(envid_t envid, int status)
 	// check whether the current environment has permission to set
 	// envid's status.
 
-	// TODO lab 4: Your code here.
+	//OK TODO lab 4: Your code here.
 	 if (status != ENV_RUNNABLE && status != ENV_NOT_RUNNABLE) {
         return -E_INVAL;
     }
@@ -135,10 +135,10 @@ sys_env_set_status(envid_t envid, int status)
 static int
 sys_env_set_pgfault_upcall(envid_t envid, void *func)
 {
-	// TODO lab 4: Your code here.
+	// OK TODO lab 4: Your code here.
 	struct Env *e;
     if (envid2env(envid, &e, 1) < 0) {
-        return -E_BAD_ENV;  
+        return ret;  
     }
     e->env_pgfault_upcall = func;
     return 0;
