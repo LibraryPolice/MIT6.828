@@ -28,7 +28,7 @@ set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 
 	if (_pgfault_handler == 0) {
 		// First time through!
-		// TODO lab 4: Your code here.
+		// OK TODO lab 4: Your code here.
 		 //为当前进程分配异常栈
 		int r = sys_page_alloc(0, (void *)(UXSTACKTOP-PGSIZE), PTE_W | PTE_U | PTE_P); 
         if (r < 0) {

@@ -105,7 +105,7 @@ duppage(envid_t envid, unsigned pn)
 envid_t
 fork(void)
 {
-	// TODO lab 4: Your code here.
+	//OK TODO lab 4: Your code here.
 	extern void _pgfault_upcall(void);
 	//设置缺页处理函数
     set_pgfault_handler(pgfault);   

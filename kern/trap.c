@@ -233,7 +233,7 @@ trap(struct Trapframe *tf)
 		// Trapped from user mode.
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
-		// TODO lab 4: Your code here.
+		// OK TODO lab 4: Your code here.
 		lock_kernel();
 		assert(curenv);
 
@@ -281,7 +281,7 @@ page_fault_handler(struct Trapframe *tf)
 
 	//内核态 直接输出
 	// LAB 3: Your code here.
-	if(tf->tf_cs && 0x01 == 0) {
+	if(tf->tf_cs && 0x03 == 0) {
 			panic("page_fault in kernel mode, fault address %d\n", fault_va);
 		}
 		
@@ -318,39 +318,29 @@ page_fault_handler(struct Trapframe *tf)
 	//   To change what the user environment runs, modify 'curenv->env_tf'
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
-	// TODO lab 4: Your code here.
+	// OK TODO lab 4: Your code here.
 	// 向用户异常栈中压入 UTrapframe，
 	// 需要判断可能发生多次异常，这种情况下需要在之前的栈顶后先留下一个空位，再压入 UTrapframe，之后会用到这个空位，
 	// 然后设置 esp 和 eip 并调用 env_run()
-	if (curenv->env_pgfault_upcall != NULL) {
-		uintptr_t esp;
+	 if (curenv->env_pgfault_upcall) {
+        uintptr_t stacktop = UXSTACKTOP;
+        if (UXSTACKTOP - PGSIZE < tf->tf_esp && tf->tf_esp < UXSTACKTOP) {
+            stacktop = tf->tf_esp;
+        }
+        uint32_t size = sizeof(struct UTrapframe) + sizeof(uint32_t);
+        user_mem_assert(curenv, (void *)stacktop - size, size, PTE_U | PTE_W);
+        struct UTrapframe *utr = (struct UTrapframe *)(stacktop - size);
+        utr->utf_fault_va = fault_va;
+        utr->utf_err = tf->tf_err;
+        utr->utf_regs = tf->tf_regs;
+        utr->utf_eip = tf->tf_eip;
+        utr->utf_eflags = tf->tf_eflags;
+        utr->utf_esp = tf->tf_esp;              //UXSTACKTOP栈上需要保存发生缺页异常时的%esp和%eip
 
-		// 判断是否是多次的异常 如果是的话 tf_esp就会在UXSTACK中
-		if (tf->tf_esp > UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP) {
-			esp = tf->tf_esp - 4 - sizeof(struct UTrapframe);   
-		} else {
-			esp = UXSTACKTOP - sizeof(struct UTrapframe);
+        curenv->env_tf.tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+        curenv->env_tf.tf_esp = (uintptr_t)utr;
+        env_run(curenv);            //重新进入用户态
 		}
-
-		// 检查权限
-		user_mem_assert(curenv, (void *) esp, sizeof(struct UTrapframe), PTE_W | PTE_U | PTE_P);
-
-		struct UTrapframe *utf = (struct UTrapframe *) (esp);
-
-		utf->utf_fault_va = fault_va;
-		utf->utf_err = tf->tf_err;
-		utf->utf_regs = tf->tf_regs;
-		utf->utf_eip = tf->tf_eip;
-		utf->utf_eflags = tf->tf_eflags;
-		//UXSTACKTOP栈上需要保存发生缺页异常时的%esp和%eip
-		utf->utf_esp = tf->tf_esp;
-
-		//TODO 哪一步处理了?
-		//把env_pgfault_upcall这个函数指针给了 tf_eip
-		tf->tf_esp = esp;
-		tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
-		env_run(curenv);  //重新进入用户态
-	}
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
 	curenv->env_id, fault_va, tf->tf_eip);
