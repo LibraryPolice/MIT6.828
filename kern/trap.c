@@ -279,6 +279,7 @@ page_fault_handler(struct Trapframe *tf)
 
 	// Handle kernel-mode page faults.
 
+	//内核态 直接输出
 	// LAB 3: Your code here.
 	if(tf->tf_cs && 0x01 == 0) {
 			panic("page_fault in kernel mode, fault address %d\n", fault_va);
@@ -286,15 +287,15 @@ page_fault_handler(struct Trapframe *tf)
 		
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
-
+	// lab3 已经解决了内核的缺页故障,下面解决用户的缺页故障
 	// Call the environment's page fault upcall, if one exists.  Set up a
 	// page fault stack frame on the user exception stack (below
 	// UXSTACKTOP), then branch to curenv->env_pgfault_upcall.
-	//
+	// 调用环境的缺页故障处理函数 ,如果它存在的话. 在用户异常栈中 加入一个缺页栈表 ,然后调用环境的缺页故障处理函数
 	// The page fault upcall might cause another page fault, in which case
 	// we branch to the page fault upcall recursively, pushing another
 	// page fault stack frame on top of the user exception stack.
-	//
+	// 
 	// It is convenient for our code which returns from a page fault
 	// (lib/pfentry.S) to have one word of scratch space at the top of the
 	// trap-time stack; it allows us to more easily restore the eip/esp. In
@@ -303,7 +304,8 @@ page_fault_handler(struct Trapframe *tf)
 	// this means we have to leave an extra word between the current top of
 	// the exception stack and the new stack frame because the exception
 	// stack _is_ the trap-time stack.
-	//
+
+	// 没有处理函数就摧毁
 	// If there's no page fault upcall, the environment didn't allocate a
 	// page for its exception stack or can't write to it, or the exception
 	// stack overflows, then destroy the environment that caused the fault.
@@ -317,10 +319,41 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// TODO lab 4: Your code here.
+	// 向用户异常栈中压入 UTrapframe，
+	// 需要判断可能发生多次异常，这种情况下需要在之前的栈顶后先留下一个空位，再压入 UTrapframe，之后会用到这个空位，
+	// 然后设置 esp 和 eip 并调用 env_run()
+	if (curenv->env_pgfault_upcall != NULL) {
+		uintptr_t esp;
 
+		// 判断是否是多次的异常 如果是的话 tf_esp就会在UXSTACK中
+		if (tf->tf_esp > UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP) {
+			esp = tf->tf_esp - 4 - sizeof(struct UTrapframe);   
+		} else {
+			esp = UXSTACKTOP - sizeof(struct UTrapframe);
+		}
+
+		// 检查权限
+		user_mem_assert(curenv, (void *) esp, sizeof(struct UTrapframe), PTE_W | PTE_U | PTE_P);
+
+		struct UTrapframe *utf = (struct UTrapframe *) (esp);
+
+		utf->utf_fault_va = fault_va;
+		utf->utf_err = tf->tf_err;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_eflags = tf->tf_eflags;
+		//UXSTACKTOP栈上需要保存发生缺页异常时的%esp和%eip
+		utf->utf_esp = tf->tf_esp;
+
+		//TODO 哪一步处理了?
+		//把env_pgfault_upcall这个函数指针给了 tf_eip
+		tf->tf_esp = esp;
+		tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
+		env_run(curenv);  //重新进入用户态
+	}
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
-		curenv->env_id, fault_va, tf->tf_eip);
+	curenv->env_id, fault_va, tf->tf_eip);
 	print_trapframe(tf);
 	env_destroy(curenv);
 }

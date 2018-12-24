@@ -31,6 +31,7 @@
 
 .text
 .globl _pgfault_upcall
+// 该函数会作为系统调用sys_env_set_pgfault_upcall()的参数。
 _pgfault_upcall:
 	// Call the C page fault handler.
 	pushl %esp			// function argument: pointer to UTF
@@ -64,19 +65,33 @@ _pgfault_upcall:
 	// may find that you have to rearrange your code in non-obvious
 	// ways as registers become unavailable as scratch space.
 	//
-	// TODO lab 4: Your code here.
-
+	// OK TODO lab 4: Your code here.
+	// TODO 理解这段汇编代码!!注释暂时问题比较多
+	// 往 trap-time esp 所指的栈顶（可能是普通栈也可能是异常栈）后面的空位写入 trap-time eip 并将 trap-time esp 往下移指向该位置 
+	movl 48(%esp), %eax //保存中断发生时的esp到eax
+	subl $4, %eax		//esp-4
+	movl %eax, 48(%esp)
+	movl 40(%esp), %ebx //保存中断发生时的eip到ebx
+	movl %ebx, (%eax)  // /将中断发生时的eip值亚入到到原来的栈中
 	// Restore the trap-time registers.  After you do this, you
 	// can no longer modify any general-purpose registers.
-	// TODO lab 4: Your code here.
+	// OK TODO lab 4: Your code here.
+	// 跳过 fault_va 和 err，然后恢复通用寄存器 
+	addl $8, %esp //跳过eip
+	popal
 
 	// Restore eflags from the stack.  After you do this, you can
 	// no longer use arithmetic operations or anything else that
 	// modifies eflags.
-	// TODO lab 4: Your code here.
-
+	// OK TODO lab 4: Your code here.
+	// 跳过 eip，然后恢复 efalgs，如果先恢复 eip 的话，指令执行的位置会改变，所以这里必须跳过 
+	addl $4, %esp
+	popfl
 	// Switch back to the adjusted trap-time stack.
-	// TODO lab 4: Your code here.
-
+	// OK TODO lab 4: Your code here.
+	// 恢复 esp，如果第一处不将 trap-time esp 指向下一个位置，这里 esp 就会指向之前的栈顶 
+	popl %esp
 	// Return to re-execute the instruction that faulted.
-	// TODO lab 4: Your code here.
+	// OK TODO lab 4: Your code here.
+	// 由于第一处的设置，现在 esp 指向的值为 trap-time eip，所以直接 ret 即可达到恢复上一次执行的效果
+	ret

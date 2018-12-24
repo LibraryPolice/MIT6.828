@@ -24,17 +24,30 @@ pgfault(struct UTrapframe *utf)
 	//   Use the read-only page table mappings at uvpt
 	//   (see <inc/memlayout.h>).
 
-	// TODO lab 4: Your code here.
-
+	// OK TODO lab 4: Your code here.
+	//只有因为写操作写时拷贝的地址这中情况，才可以抢救。否则一律panic
+	if (!((err & FEC_WR) && (uvpt[PGNUM(addr)] & PTE_COW))) { //只有因为写操作写时拷贝的地址这中情况，才可以抢救。否则一律panic
+        panic("pgfault():not cow");
+    }
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
 	// page to the old page's address.
 	// Hint:
 	//   You should make three system calls.
 
-	// TODO lab 4: Your code here.
-
-	panic("pgfault not implemented");
+	// OK TODO lab 4: Your code here.
+	addr = ROUNDDOWN(addr, PGSIZE);
+	  //将当前进程PFTEMP也映射到当前进程addr指向的物理页
+    if ((r = sys_page_map(0, addr, 0, PFTEMP, PTE_U|PTE_P)) < 0)      
+        panic("sys_page_map: %e", r);
+	 //令当前进程addr指向新分配的物理页
+    if ((r = sys_page_alloc(0, addr, PTE_P|PTE_U|PTE_W)) < 0)  
+        panic("sys_page_alloc: %e", r);
+	 //将PFTEMP指向的物理页拷贝到addr指向的物理页
+    memmove(addr, PFTEMP, PGSIZE);             
+	  //解除当前进程PFTEMP映射                
+    if ((r = sys_page_unmap(0, PFTEMP)) < 0)                  
+        panic("sys_page_unmap: %e", r);
 }
 
 //
@@ -53,8 +66,23 @@ duppage(envid_t envid, unsigned pn)
 {
 	int r;
 
-	// TODO lab 4: Your code here.
-	panic("duppage not implemented");
+	// OK TODO lab 4: Your code here.
+	void *addr = (void*) (pn * PGSIZE);
+	//对于表示为PTE_SHARE的页，拷贝映射关系，并且两个进程都有读写权限
+    if (uvpt[pn] & PTE_SHARE) {
+        sys_page_map(0, addr, envid, addr, PTE_SYSCALL);        
+    } 
+	 //对于UTOP以下的可写的或者写时拷贝的页，拷贝映射关系的同时，需要同时标记当前进程和子进程的页表项为PTE_COW
+	else if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)) {
+        if ((r = sys_page_map(0, addr, envid, addr, PTE_COW|PTE_U|PTE_P)) < 0)
+            panic("sys_page_map：%e", r);
+        if ((r = sys_page_map(0, addr, 0, addr, PTE_COW|PTE_U|PTE_P)) < 0)
+            panic("sys_page_map：%e", r);
+    }
+	 //对于只读的页，只需要拷贝映射关系即可
+	 else {
+        sys_page_map(0, addr, envid, addr, PTE_U|PTE_P);   
+    }
 	return 0;
 }
 
@@ -78,7 +106,39 @@ envid_t
 fork(void)
 {
 	// TODO lab 4: Your code here.
-	panic("fork not implemented");
+	extern void _pgfault_upcall(void);
+	//设置缺页处理函数
+    set_pgfault_handler(pgfault);   
+	//系统调用，只是简单创建一个Env结构，复制当前用户环境寄存器状态，UTOP以下的页目录还没有建立
+    envid_t envid = sys_exofork();  
+	 //子进程将走这个逻辑
+    if (envid == 0) {              
+        thisenv = &envs[ENVX(sys_getenvid())];
+        return 0;
+    }
+    if (envid < 0) {
+        panic("sys_exofork: %e", envid);
+    }
+
+    uint32_t addr;
+    for (addr = 0; addr < USTACKTOP; addr += PGSIZE) {
+		//为什么uvpt[pagenumber]能访问到第pagenumber项页表条目：https://pdos.csail.mit.edu/6.828/2018/labs/lab4/uvpt.html
+        if ((uvpd[PDX(addr)] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_P) 
+            && (uvpt[PGNUM(addr)] & PTE_U)) {
+			//拷贝当前进程映射关系到子进程
+            duppage(envid, PGNUM(addr));    
+        }
+    }
+    int r;
+	//为子进程分配异常栈
+    if ((r = sys_page_alloc(envid, (void *)(UXSTACKTOP-PGSIZE), PTE_P | PTE_W | PTE_U)) < 0)    
+        panic("sys_page_alloc: %e", r);
+    //为子进程设置_pgfault_upcall
+	sys_env_set_pgfault_upcall(envid, _pgfault_upcall);     
+	//设置子进程为ENV_RUNNABLE状态
+    if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0)  
+        panic("sys_env_set_status: %e", r);
+    return envid;
 }
 
 // Challenge!

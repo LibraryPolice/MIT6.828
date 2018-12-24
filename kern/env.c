@@ -72,6 +72,7 @@ struct Pseudodesc gdt_pd = {
 //   On success, sets *env_store to the environment.
 //   On error, sets *env_store to NULL.
 //
+// 将进程号转化为指针
 int
 envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 {
@@ -588,7 +589,7 @@ env_destroy(struct Env *e)
 // This exits the kernel and starts executing some environment's code.
 //
 // This function does not return.
-//
+// 重新加载tf里面的寄存器的值
 void
 env_pop_tf(struct Trapframe *tf)
 {
