@@ -280,7 +280,11 @@ mem_init_mp(void)
 	//             Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
 	//
-	// LAB 4: Your code here:
+	// OK TODO lab 4: Your code here:
+	for (int i = 0; i != NCPU; ++i) {
+    uintptr_t kstacktop = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+    boot_map_region(kern_pgdir, kstacktop - KSTKSIZE, KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_W | PTE_P);
+	}	
 
 }
 
@@ -299,7 +303,7 @@ mem_init_mp(void)
 void
 page_init(void)
 {
-	// LAB 4:
+	// OK TODO lab 4:
 	// Change your code to mark the physical page at MPENTRY_PADDR
 	// as in use
 
@@ -338,9 +342,10 @@ page_init(void)
 
 	// extern外未使用的为0
     for (i = first_free_address/PGSIZE; i < npages; i++) {
+		if(i != PGNUM(MPENTRY_PADDR)){
         pages[i].pp_ref = 0;
         pages[i].pp_link = page_free_list;
-        page_free_list = &pages[i];
+        page_free_list = &pages[i];}
     }
 
 }

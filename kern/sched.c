@@ -28,8 +28,17 @@ sched_yield(void)
 	// no runnable environments, simply drop through to the code
 	// below to halt the cpu.
 
-	// LAB 4: Your code here.
-
+	// TODO lab 4: Your code here.
+	idle = curenv;
+	size_t i = idle != NULL ? ENVX(idle->env_id) + 1 : 0;
+	for (size_t j = 0; j != NENV; j++, i = (i + 1) % NENV) {
+		if (envs[i].env_status == ENV_RUNNABLE) {
+			env_run(envs + i);
+		}
+	} 
+	if (idle && idle->env_status == ENV_RUNNING) {
+		env_run(idle);
+	}
 	// sched_halt never returns
 	sched_halt();
 }

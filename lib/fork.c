@@ -24,7 +24,7 @@ pgfault(struct UTrapframe *utf)
 	//   Use the read-only page table mappings at uvpt
 	//   (see <inc/memlayout.h>).
 
-	// LAB 4: Your code here.
+	// TODO lab 4: Your code here.
 
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
@@ -32,7 +32,7 @@ pgfault(struct UTrapframe *utf)
 	// Hint:
 	//   You should make three system calls.
 
-	// LAB 4: Your code here.
+	// TODO lab 4: Your code here.
 
 	panic("pgfault not implemented");
 }
@@ -53,7 +53,7 @@ duppage(envid_t envid, unsigned pn)
 {
 	int r;
 
-	// LAB 4: Your code here.
+	// TODO lab 4: Your code here.
 	panic("duppage not implemented");
 	return 0;
 }
@@ -77,7 +77,7 @@ duppage(envid_t envid, unsigned pn)
 envid_t
 fork(void)
 {
-	// LAB 4: Your code here.
+	// TODO lab 4: Your code here.
 	panic("fork not implemented");
 }
 
