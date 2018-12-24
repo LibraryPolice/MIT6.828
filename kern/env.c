@@ -589,7 +589,7 @@ env_destroy(struct Env *e)
 // This exits the kernel and starts executing some environment's code.
 //
 // This function does not return.
-//
+// 重新加载tf里面的寄存器的值
 void
 env_pop_tf(struct Trapframe *tf)
 {

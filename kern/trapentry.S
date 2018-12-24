@@ -55,6 +55,7 @@
  */
 .globl _alltraps
 _alltraps:
+# 在内核栈上压入trapframe的剩余结构
 	# Build trap frame.
 	pushl %ds
 	pushl %es

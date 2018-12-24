@@ -342,12 +342,14 @@ page_fault_handler(struct Trapframe *tf)
 		utf->utf_regs = tf->tf_regs;
 		utf->utf_eip = tf->tf_eip;
 		utf->utf_eflags = tf->tf_eflags;
+		//UXSTACKTOP栈上需要保存发生缺页异常时的%esp和%eip
 		utf->utf_esp = tf->tf_esp;
 
 		//TODO 哪一步处理了?
+		//把env_pgfault_upcall这个函数指针给了 tf_eip
 		tf->tf_esp = esp;
 		tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
-		env_run(curenv);
+		env_run(curenv);  //重新进入用户态
 	}
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
