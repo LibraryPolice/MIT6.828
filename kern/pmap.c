@@ -307,47 +307,14 @@ page_init(void)
 	// Change your code to mark the physical page at MPENTRY_PADDR
 	// as in use
 
-	size_t i;
-	
-	// The example code here marks all physical pages as free.
-	// However this is not truly the case.  What memory is free?
-	//  1) Mark physical page 0 as in use.
-	//     This way we preserve the real-mode IDT and BIOS structures
-	//     in case we ever need them.  (Currently we don't, but...)
-	pages[0].pp_ref = 1;
-	//  2) The rest of base memory, [PGSIZE, npages_basemem * PGSIZE)
-	//     is free.
-	// basemem 为0
-	for ( i = 1; i < npages_basemem; i++) {
-        pages[i].pp_ref = 0;
-		//添加到page_free_list的链表头
-        pages[i].pp_link = page_free_list;
-        page_free_list = &pages[i];
+  size_t left_i = PGNUM(IOPHYSMEM);
+    size_t right_i = PGNUM(PADDR(envs + NENV));
+    for (size_t i = 1; i < npages; i++) {
+        if ((i < left_i || i > right_i) && i != PGNUM(MPENTRY_PADDR)) {
+            pages[i].pp_link = page_free_list;
+            page_free_list = &pages[i];
+        }
     }
-	//  3) Then comes the IO hole [IOPHYSMEM, EXTPHYSMEM), which must
-	//     never be allocated.
-	// IO部分为1
-	for ( i = IOPHYSMEM/PGSIZE; i < EXTPHYSMEM/PGSIZE; i++) {
-        pages[i].pp_ref = 1;
-    }
-	//  4) Then extended memory [EXTPHYSMEM, ...).
-	//     Some of it is in use, some is free. Where is the kernel
-	//     in physical memory?  Which pages are already in use for
-	//     page tables and other data structures?
-	// 已使用的部分为1
-	size_t first_free_address = PADDR(boot_alloc(0));
-    for (i = EXTPHYSMEM/PGSIZE; i < first_free_address/PGSIZE; i++) {
-        pages[i].pp_ref = 1;
-    }
-
-	// extern外未使用的为0
-    for (i = first_free_address/PGSIZE; i < npages; i++) {
-		if(i != PGNUM(MPENTRY_PADDR)){
-        pages[i].pp_ref = 0;
-        pages[i].pp_link = page_free_list;
-        page_free_list = &pages[i];}
-    }
-
 }
 
 //
@@ -654,7 +621,14 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	uintptr_t ret = base;
+	size = ROUNDUP(size, PGSIZE);
+	base = base + size;
+	if (base >= MMIOLIM) {
+		panic("larger than MMIOLIM");
+	}
+	boot_map_region(kern_pgdir, ret, size, pa, PTE_PCD | PTE_PWT | PTE_W);
+	return (void *) ret;
 }
 
 static uintptr_t user_mem_check_addr;
