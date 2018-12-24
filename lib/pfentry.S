@@ -66,17 +66,31 @@ _pgfault_upcall:
 	//
 	// TODO lab 4: Your code here.
 
+	// 往 trap-time esp 所指的栈顶（可能是普通栈也可能是异常栈）后面的空位写入 trap-time eip 并将 trap-time esp 往下移指向该位置 
+	movl 48(%esp), %eax
+	subl $4, %eax
+	movl %eax, 48(%esp)
+	movl 40(%esp), %ebx
+	movl %ebx, (%eax)
 	// Restore the trap-time registers.  After you do this, you
 	// can no longer modify any general-purpose registers.
 	// TODO lab 4: Your code here.
+	// 跳过 fault_va 和 err，然后恢复通用寄存器 
+	addl $8, %esp
+	popal
 
 	// Restore eflags from the stack.  After you do this, you can
 	// no longer use arithmetic operations or anything else that
 	// modifies eflags.
 	// TODO lab 4: Your code here.
-
+	// 跳过 eip，然后恢复 efalgs，如果先恢复 eip 的话，指令执行的位置会改变，所以这里必须跳过 
+	addl $4, %esp
+	popfl
 	// Switch back to the adjusted trap-time stack.
 	// TODO lab 4: Your code here.
-
+	// 恢复 esp，如果第一处不将 trap-time esp 指向下一个位置，这里 esp 就会指向之前的栈顶 
+	popl %esp
 	// Return to re-execute the instruction that faulted.
 	// TODO lab 4: Your code here.
+	// 由于第一处的设置，现在 esp 指向的值为 trap-time eip，所以直接 ret 即可达到恢复上一次执行的效果
+	ret

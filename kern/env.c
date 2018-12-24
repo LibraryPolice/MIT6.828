@@ -72,6 +72,7 @@ struct Pseudodesc gdt_pd = {
 //   On success, sets *env_store to the environment.
 //   On error, sets *env_store to NULL.
 //
+// 将进程号转化为指针
 int
 envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 {
